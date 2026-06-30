@@ -41,7 +41,8 @@ import {
   FileText,
   CalendarDays,
   Flame,
-  HelpCircle
+  HelpCircle,
+  Edit3
 } from "lucide-react";
 
 export default function App() {
@@ -80,6 +81,8 @@ export default function App() {
 
   // Manual commitment addition drawer
   const [showAddManual, setShowAddManual] = useState(false);
+  const [showEditManual, setShowEditManual] = useState(false);
+  const [showHighRiskOnly, setShowHighRiskOnly] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newType, setNewType] = useState<CommitmentType>("meeting");
   const [newStart, setNewStart] = useState("");
@@ -604,6 +607,63 @@ export default function App() {
     }
   };
 
+  const openEditModal = (commitment: Commitment) => {
+    setNewTitle(commitment.title);
+    setNewType(commitment.type);
+    
+    // Format ISO string to datetime-local expected format (YYYY-MM-DDThh:mm)
+    const formatForInput = (iso: string) => {
+      if (!iso) return "";
+      const d = new Date(iso);
+      const offset = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+    };
+    
+    setNewStart(formatForInput(commitment.start));
+    setNewEnd(formatForInput(commitment.end));
+    setNewDesc(commitment.riskRationale);
+    
+    setShowEditManual(true);
+  };
+
+  const handleEditCommitment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !selectedCommitment || !newTitle || !newStart) return;
+
+    try {
+      const risk = calculateRiskScore(newStart, tasksMap[selectedCommitment.id] || [], rawCalendarEvents.length, newType);
+      
+      const updatedComm: Commitment = {
+        ...selectedCommitment,
+        title: newTitle,
+        type: newType,
+        start: new Date(newStart).toISOString(),
+        end: newEnd ? new Date(newEnd).toISOString() : new Date(new Date(newStart).getTime() + 60 * 60 * 1000).toISOString(),
+        riskScore: risk,
+        riskRationale: newDesc || selectedCommitment.riskRationale,
+      };
+
+      await saveCommitment(user.uid, updatedComm);
+      
+      const list = commitments.map(c => c.id === updatedComm.id ? updatedComm : c);
+      setCommitments(list);
+      setSelectedCommitment(updatedComm);
+
+      // Reset fields
+      setNewTitle("");
+      setNewType("meeting");
+      setNewStart("");
+      setNewEnd("");
+      setNewDesc("");
+      setShowEditManual(false);
+
+      // Refresh weekly overall insights
+      await handleAIWeeksInsights(user, list, rawCalendarEvents.length);
+    } catch (err) {
+      console.error("Error editing manual goal:", err);
+    }
+  };
+
   // Voice Capture (Experimental Voice Assistant)
   const handleVoiceCapture = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -739,9 +799,9 @@ export default function App() {
 
   // Helper styles for continuous Risk Meter color coding
   const getRiskColorInfo = (score: number) => {
-    if (score >= 70) return { text: "text-rose-500", border: "border-rose-900/50", bg: "bg-rose-950/40", bar: "bg-rose-500", label: "Critical Risk" };
-    if (score >= 40) return { text: "text-amber-500", border: "border-amber-900/50", bg: "bg-amber-950/40", bar: "bg-amber-500", label: "Warning Alert" };
-    return { text: "text-emerald-500", border: "border-emerald-950", bg: "bg-emerald-950/20", bar: "bg-emerald-500", label: "Stable/Prepared" };
+    if (score >= 70) return { text: "text-rose-500", border: "border-rose-900/50", bg: "bg-rose-950/40", bar: "bg-rose-500", label: "Critical Risk", triageBadge: "Immediate" };
+    if (score >= 40) return { text: "text-amber-500", border: "border-amber-900/50", bg: "bg-amber-950/40", bar: "bg-amber-500", label: "Warning Alert", triageBadge: "Planning" };
+    return { text: "text-emerald-500", border: "border-emerald-950", bg: "bg-emerald-950/20", bar: "bg-emerald-500", label: "Stable/Prepared", triageBadge: "Monitoring" };
   };
 
   // Format Date string helper
@@ -837,19 +897,22 @@ export default function App() {
 
   // Active Workspace Dashboard Layout
   return (
-    <div className="min-h-screen bg-[#07090c] text-slate-100 flex flex-col font-sans relative" id="copilot-workspace">
+    <div className="min-h-screen bg-[#0a0c10] text-slate-100 flex flex-col font-sans relative overflow-x-hidden" id="copilot-workspace">
       
+      {/* Decorative Grid Panel */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#151b22_1px,transparent_1px),linear-gradient(to_bottom,#151b22_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20 pointer-events-none"></div>
+
       {/* HEADER SECTION */}
-      <header className="sticky top-0 z-40 bg-[#0d1117]/90 backdrop-blur border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center">
-            <Zap className="w-5 h-5 text-amber-500 animate-pulse" />
+      <header className="sticky top-0 z-40 bg-[#0a0c10]/80 backdrop-blur-md border-b border-slate-800/80 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3 relative z-10">
+          <div className="w-10 h-10 bg-gradient-to-br from-amber-500/20 to-rose-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center shadow-inner">
+            <Zap className="w-5 h-5 text-amber-500 animate-pulse drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
           </div>
           <div>
-            <h1 className="font-display font-bold text-lg tracking-tight text-white flex items-center gap-2">
+            <h1 className="font-display font-bold text-xl tracking-tight text-white flex items-center gap-2">
               AI Life Copilot
             </h1>
-            <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Autonomous Active Execution Command</p>
+            <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">Autonomous Active Execution Command</p>
           </div>
         </div>
 
@@ -923,40 +986,48 @@ export default function App() {
         <section className="lg:col-span-3 flex flex-col gap-6" id="left-sidebar-pane">
           
           {/* CRITICAL RISK CENTER HERO BAR */}
-          <div className="bg-[#0b0e14] border border-slate-800/80 rounded-xl p-5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-3xl -mr-12 -mt-12"></div>
-            <h3 className="font-display text-sm font-semibold text-slate-300 flex items-center gap-2 mb-3">
+          <div className="bg-gradient-to-b from-[#0f1319] to-[#0b0e14] border border-slate-800 rounded-xl p-5 relative overflow-hidden shadow-2xl">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+            <h3 className="font-display text-sm font-semibold text-slate-200 flex items-center gap-2 mb-4 relative z-10">
               <TrendingUp className="w-4 h-4 text-amber-500" />
               Real-time Risk Center
             </h3>
             
-            <div className="flex items-baseline justify-between mt-1">
-              <div className="text-3xl font-display font-semibold text-amber-400">
-                {commitments.filter(c => c.riskScore >= 70).length}
+            <div className="grid grid-cols-3 gap-3 mb-5 relative z-10">
+              <div className="bg-slate-900/50 border border-slate-800/80 rounded-lg p-3 flex flex-col items-center justify-center">
+                <span className="text-2xl font-display font-semibold text-rose-500">{commitments.filter(c => c.riskScore >= 70).length}</span>
+                <span className="text-[9px] font-mono text-slate-400 uppercase mt-1 tracking-wider">Critical</span>
               </div>
-              <span className="text-[10px] font-mono text-rose-500 border border-rose-900/40 bg-rose-950/20 px-2 py-0.5 rounded uppercase">Critical Action Items</span>
+              <div className="bg-slate-900/50 border border-slate-800/80 rounded-lg p-3 flex flex-col items-center justify-center">
+                <span className="text-2xl font-display font-semibold text-amber-500">{commitments.filter(c => c.riskScore >= 40 && c.riskScore < 70).length}</span>
+                <span className="text-[9px] font-mono text-slate-400 uppercase mt-1 tracking-wider">Warning</span>
+              </div>
+              <div className="bg-slate-900/50 border border-slate-800/80 rounded-lg p-3 flex flex-col items-center justify-center">
+                <span className="text-2xl font-display font-semibold text-emerald-500">{commitments.filter(c => c.riskScore < 40).length}</span>
+                <span className="text-[9px] font-mono text-slate-400 uppercase mt-1 tracking-wider">Stable</span>
+              </div>
             </div>
 
-            <div className="mt-4 p-3 bg-slate-900/40 rounded-lg border border-slate-800/40">
-              <div className="flex justify-between text-[11px] text-slate-400">
-                <span>Core Schedule Density:</span>
-                <span className="font-mono text-amber-500 font-semibold">{rawCalendarEvents.length * 10}%</span>
+            <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800/60 relative z-10">
+              <div className="flex justify-between text-[11px] text-slate-400 mb-2">
+                <span className="font-mono uppercase tracking-wider">Core Schedule Density</span>
+                <span className="font-mono text-amber-500 font-semibold">{Math.min(100, rawCalendarEvents.length * 10)}%</span>
               </div>
-              <div className="w-full bg-slate-950 h-1 rounded overflow-hidden mt-1.5">
-                <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${Math.min(100, rawCalendarEvents.length * 10)}%` }}></div>
+              <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden">
+                <div className="bg-gradient-to-r from-amber-600 to-amber-400 h-full transition-all duration-500" style={{ width: `${Math.min(100, rawCalendarEvents.length * 10)}%` }}></div>
               </div>
             </div>
 
             <button 
               onClick={() => setShowFormulaModal(true)}
-              className="mt-3 text-[10px] text-slate-500 font-mono flex items-center gap-1 hover:text-amber-500 cursor-pointer"
+              className="mt-4 w-full py-2 bg-slate-900/50 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg transition-colors text-[10px] text-slate-400 hover:text-slate-200 font-mono flex items-center justify-center gap-2 cursor-pointer relative z-10"
             >
               <HelpCircle className="w-3 h-3" /> View Predictive Math Formula
             </button>
           </div>
 
           {/* AI HOLISTIC INSIGHTS */}
-          <div className="bg-[#0b0e14] border border-slate-800/80 rounded-xl p-5 flex-1 flex flex-col">
+          <div className="bg-gradient-to-b from-[#0f1319] to-[#0b0e14] border border-slate-800/80 rounded-xl p-5 flex-1 flex flex-col shadow-xl">
             <h3 className="font-display text-sm font-semibold text-slate-200 flex items-center gap-2 mb-4">
               <Sparkles className="w-4 h-4 text-indigo-400" />
               Proactive AI Insights
@@ -1010,13 +1081,24 @@ export default function App() {
 
         {/* MIDDLE COLUMN: COMMITMENTS WORKSPACE LIST (cols 5) */}
         <section className="lg:col-span-5 flex flex-col gap-6" id="commitments-workspace-panel">
-          <div className="bg-[#0b0e14] border border-slate-800 rounded-xl p-5 flex-1 flex flex-col">
+          <div className="bg-gradient-to-b from-[#0f1319] to-[#0b0e14] border border-slate-800/80 rounded-xl p-5 flex-1 flex flex-col shadow-xl">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-900">
               <h2 className="font-display font-medium text-sm text-slate-200 uppercase tracking-widest flex items-center gap-2">
                 <Flame className="w-4 h-4 text-rose-500" />
                 Active Commitments
               </h2>
-              <span className="text-xs text-slate-500 font-mono">{commitments.length} Detected</span>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-xs font-mono text-slate-400 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={showHighRiskOnly}
+                    onChange={(e) => setShowHighRiskOnly(e.target.checked)}
+                    className="accent-amber-500"
+                  />
+                  High Risk Only
+                </label>
+                <span className="text-xs text-slate-500 font-mono">{commitments.length} Detected</span>
+              </div>
             </div>
 
             {aiError && (
@@ -1045,6 +1127,7 @@ export default function App() {
             ) : (
               <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[60vh] lg:max-h-[75vh]">
                 {commitments
+                  .filter(item => showHighRiskOnly ? item.riskScore >= 70 : true)
                   .sort((a,b) => b.riskScore - a.riskScore)
                   .map((item) => {
                     const isSelected = selectedCommitment?.id === item.id;
@@ -1087,6 +1170,9 @@ export default function App() {
                                   Manual Target
                                 </span>
                               )}
+                              <span className={`border ${risk.border} ${risk.bg} px-1.5 py-0.5 rounded ${risk.text} font-bold tracking-wide uppercase`}>
+                                {risk.triageBadge}
+                              </span>
                             </div>
                           </div>
 
@@ -1126,7 +1212,7 @@ export default function App() {
         <section className="lg:col-span-4" id="details-planning-panel">
           <AnimatePresence mode="wait">
             {!selectedCommitment ? (
-              <div className="h-full bg-[#0b0e14] border border-slate-800/60 rounded-xl p-5 flex items-center justify-center text-center">
+              <div className="h-full bg-gradient-to-b from-[#0f1319] to-[#0b0e14] border border-slate-800/80 shadow-xl rounded-xl p-5 flex items-center justify-center text-center">
                 <p className="text-xs text-slate-500 font-mono">Select an active commitment to load execution roadmaps...</p>
               </div>
             ) : (
@@ -1135,7 +1221,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="bg-[#0b0e14] border border-slate-800 rounded-xl p-5 flex flex-col h-full justify-between"
+                className="bg-gradient-to-b from-[#0f1319] to-[#0b0e14] border border-slate-800/80 shadow-xl rounded-xl p-5 flex flex-col h-full justify-between"
               >
                 
                 {/* Details Header */}
@@ -1157,9 +1243,18 @@ export default function App() {
                     </span>
                   </div>
 
-                  <h3 className="font-display font-bold text-xl text-white leading-tight">
-                    {selectedCommitment.title}
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-display font-bold text-xl text-white leading-tight">
+                      {selectedCommitment.title}
+                    </h3>
+                    <button 
+                      onClick={() => openEditModal(selectedCommitment)}
+                      className="text-slate-400 hover:text-white p-1.5 rounded-md transition-colors cursor-pointer bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0"
+                      title="Edit Commitment"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  </div>
 
                   <div className={`flex items-start gap-3 p-4 rounded-xl border ${
                     selectedCommitment.riskScore >= 70 
@@ -1307,7 +1402,7 @@ export default function App() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-[#0f1319] border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative"
+              className="bg-gradient-to-b from-[#12161b] to-[#0f1319] border border-slate-800/80 shadow-2xl rounded-2xl max-w-lg w-full p-6 space-y-4 relative"
             >
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h3 className="font-display font-semibold text-white flex items-center gap-2">
@@ -1347,7 +1442,7 @@ export default function App() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-[#0f1319] border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative"
+              className="bg-gradient-to-b from-[#12161b] to-[#0f1319] border border-slate-800/80 shadow-2xl rounded-2xl max-w-md w-full p-6 space-y-4 relative"
             >
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h3 className="font-display font-semibold text-white">Add Manual Commitment / Goal</h3>
@@ -1419,6 +1514,91 @@ export default function App() {
                   className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition rounded-lg py-2.5 text-xs inline-flex items-center justify-center gap-1"
                 >
                   <PlusCircle className="w-4 h-4" /> Save Commitment Target
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* EDIT MANUAL GOAL/DEADLINE MODAL */}
+      <AnimatePresence>
+        {showEditManual && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-gradient-to-b from-[#12161b] to-[#0f1319] border border-slate-800/80 shadow-2xl rounded-2xl max-w-md w-full p-6 space-y-4 relative"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="font-display font-semibold text-white">Edit Active Commitment</h3>
+                <button 
+                  onClick={() => setShowEditManual(false)}
+                  className="text-slate-400 hover:text-white font-mono text-xs cursor-pointer"
+                >
+                  ✕ Close
+                </button>
+              </div>
+
+              <form onSubmit={handleEditCommitment} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">Commitment Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="e.g., PM Interview, Calculus 2 Final, Client Pitch"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">Category Type</label>
+                    <select
+                      value={newType}
+                      onChange={(e) => setNewType(e.target.value as CommitmentType)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="interview">Interview</option>
+                      <option value="exam">Exam</option>
+                      <option value="presentation">Presentation</option>
+                      <option value="deadline">Project Deadline</option>
+                      <option value="meeting">Critical Meeting</option>
+                      <option value="travel">Travel / Logistics</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">Due/Start Date</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={newStart}
+                      onChange={(e) => setNewStart(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">Description / Rationale</label>
+                  <textarea
+                    rows={3}
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    placeholder="Provide meeting context, firm name, review topics, or syllabus objectives..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition rounded-lg py-2.5 text-xs inline-flex items-center justify-center gap-1"
+                >
+                  <Edit3 className="w-4 h-4" /> Save Changes
                 </button>
               </form>
             </motion.div>

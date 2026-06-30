@@ -208,7 +208,7 @@ Return JSON strictly. No outer wrappers.`;
 
     const ai = getGemini();
     const result = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-pro",
       contents: prompt,
     });
 
