@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with timezone preference",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "timezone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "timezone"]
+    },
+    "Commitment": {
+      "title": "Commitment",
+      "description": "An active commitment extracted from Calendar or Email needs preparation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "calendarEventId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["interview", "exam", "meeting", "pitch", "assignment", "other"] },
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" },
+        "riskScore": { "type": "integer" },
+        "riskRationale": { "type": "string" },
+        "prepBrief": { "type": "string" },
+        "isCompleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "type", "start", "riskScore", "isCompleted"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A study or work preparation task created for a commitment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "commitmentId": { "type": "string" },
+        "title": { "type": "string" },
+        "durationMinutes": { "type": "integer" },
+        "isCompleted": { "type": "boolean" },
+        "prerequisiteTaskId": { "type": "string" },
+        "calendarBlockId": { "type": "string" },
+        "order": { "type": "integer" }
+      },
+      "required": ["id", "commitmentId", "title", "durationMinutes", "isCompleted", "order"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Personal profiles"
+    },
+    "/users/{userId}/commitments/{commitmentId}": {
+      "schema": "Commitment",
+      "description": "Extracted high stakes commitments"
+    },
+    "/users/{userId}/commitments/{commitmentId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Preparation steps and tasks for a commitment"
+    }
+  }
+}

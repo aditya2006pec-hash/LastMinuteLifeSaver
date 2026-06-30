@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net (Default Catch-All Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable, Hardened Helpers
+    function isValidId(id) { 
+      return id is string; 
+    }
+    
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    
+    function isOwner(userId) { 
+      return isSignedIn() && request.auth.uid == userId; 
+    }
+
+    // Validation for User Profiles
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['id', 'email', 'timezone']);
+    }
+
+    // Validation for Commitments
+    function isValidCommitment(data) {
+      return data.keys().hasAll(['id', 'title', 'type', 'start', 'riskScore', 'isCompleted']) &&
+             data.id is string &&
+             data.title is string && data.title.size() <= 512 &&
+             data.type is string && data.type.size() <= 64 &&
+             data.start is string &&
+             data.riskScore is number && data.riskScore >= 0 && data.riskScore <= 100 &&
+             data.isCompleted is bool;
+    }
+
+    // Validation for Tasks
+    function isValidTask(data) {
+      return data.keys().hasAll(['id', 'commitmentId', 'title', 'durationMinutes', 'isCompleted', 'order']) &&
+             data.id is string &&
+             data.commitmentId is string &&
+             data.title is string && data.title.size() <= 512 &&
+             data.durationMinutes is number && data.durationMinutes >= 0 &&
+             data.isCompleted is bool &&
+             data.order is number;
+    }
+
+    // Users Collection and Nested Resource Matches
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /commitments/{commitmentId} {
+        allow read, write: if isOwner(userId);
+
+        match /tasks/{taskId} {
+          allow read, write: if isOwner(userId);
+        }
+      }
+    }
+  }
+}

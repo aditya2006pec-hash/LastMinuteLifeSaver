@@ -1,0 +1,6 @@
+{
+  "name": "AI Life Copilot",
+  "description": "An active execution dashboard that predicts commitment failure, analyzes risks, and autonomously prepares and schedules task readiness using Google Calendar and Gmail.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
